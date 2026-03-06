@@ -5,6 +5,19 @@ export default function PracticeScreen({ topic, difficulty, questions, onBack, o
   const [selectedAnswer, setSelectedAnswer] = useState(null);
   const [userAnswers, setUserAnswers] = useState([]);
 
+  if (!questions || questions.length === 0) {
+    return (
+      <div style={styles.page}>
+        <div style={styles.card}>
+          <button style={styles.backBtn} onClick={onBack}>
+           ← Back
+          </button>
+          <h2 style={styles.title}>No questions available</h2>
+        </div>
+      </div>
+    );
+  }
+
   const currentQuestion = questions[currentIndex];
   const isLastQuestion = currentIndex === questions.length - 1;
 
