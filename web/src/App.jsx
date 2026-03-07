@@ -19,89 +19,99 @@ export default function App() {
   const [score, setScore] = useState(0);
   const [weakConcept, setWeakConcept] = useState("");
 
-  const [questions] = useState([
-    {
-      question: "What was the Cold War mainly about?",
-      choices: [
-        "Trade competition",
-        "Ideological conflict",
-        "Sports rivalry",
-        "Colonial expansion",
-      ],
-      answerIndex: 1,
-      explanation: "It was mainly a conflict between capitalism and communism.",
-    },
-    {
-      question: 'What did the policy of "containment" mean?',
-      choices: [
-        "Ending World War II",
-        "Stopping communism from spreading",
-        "Creating alliances",
-        "Building nuclear weapons",
-      ],
-      answerIndex: 1,
-      explanation: "Containment aimed to stop communism from spreading.",
-    },
-    {
-      question: "Which event nearly led to nuclear war?",
-      choices: [
-        "Pearl Harbor",
-        "French Revolution",
-        "Cuban Missile Crisis",
-        "Berlin Conference",
-      ],
-      answerIndex: 2,
-      explanation: "The Cuban Missile Crisis was the closest point to nuclear war.",
-    },
-    {
-      question: "Why did the U.S. and USSR avoid direct war?",
-      choices: [
-        "They had no armies",
-        "They were allies",
-        "Nuclear weapons risk",
-        "They shared the same ideology",
-      ],
-      answerIndex: 2,
-      explanation: "Direct war could escalate into nuclear war.",
-    },
-    {
-      question: "When did the Cold War end?",
-      choices: ["1945", "1962", "1991", "2001"],
-      answerIndex: 2,
-      explanation: "It ended with the collapse of the Soviet Union in 1991.",
-    },
-  ]);
+  const [questions, setQuestions] = useState([]);
 
-  function handleDifficultyContinue() {
-    setLoading(true);
+  async function handleDifficultyContinue() {
+  if (!subject || !topic || !difficulty) return;
 
-    setTimeout(() => {
-      setLesson(
-        `(${difficulty}) ${topic}: The Cold War was a long period of tension between the United States and the Soviet Union after World War II. They did not fight directly, but competed through alliances, propaganda, and conflicts in other countries. The U.S. used a policy called containment to limit the spread of communism. Events like the Berlin Blockade, the Korean War, and the Cuban Missile Crisis increased fear of nuclear war. The Cold War ended as the Soviet Union weakened and collapsed in 1991.`
-      );
-      setScreen("lesson");
-      setLoading(false);
-    }, 500);
-  }
+  setLoading(true);
 
-  function handlePracticeFinish(userAnswers) {
-    let correctCount = 0;
-
-    userAnswers.forEach((answer, index) => {
-      if (answer === questions[index].answerIndex) {
-        correctCount++;
-      }
+  try {
+    const lessonResponse = await fetch("/api/lesson", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        subject,
+        topic,
+        difficulty,
+      }),
     });
 
-    setScore(correctCount);
-    setWeakConcept("Containment");
-    setScreen("results");
+    if (!lessonResponse.ok) {
+      throw new Error("Failed to fetch lesson");
+    }
+
+    const lessonData = await lessonResponse.json();
+
+    const quizResponse = await fetch("/api/quiz", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        subject,
+        topic,
+        difficulty,
+      }),
+    });
+
+    if (!quizResponse.ok) {
+      throw new Error("Failed to fetch quiz");
+    }
+
+    const quizData = await quizResponse.json();
+
+    setLesson(lessonData.lesson || "");
+    setQuestions(quizData.questions || []);
+    setScreen("lesson");
+  } catch (error) {
+    console.error("Error loading lesson/quiz:", error);
+    alert("Could not load lesson and quiz. Please try again.");
+  } finally {
+    setLoading(false);
   }
+}
+
+  function handlePracticeFinish(userAnswers) {
+  let correctCount = 0;
+  let firstMissedQuestion = null;
+
+  userAnswers.forEach((answer, index) => {
+    if (answer === questions[index]?.answerIndex) {
+      correctCount++;
+    } else if (!firstMissedQuestion) {
+      firstMissedQuestion = questions[index];
+    }
+  });
+
+  setScore(correctCount);
+
+  if (firstMissedQuestion) {
+    setWeakConcept(firstMissedQuestion.explanation || firstMissedQuestion.question);
+  } else {
+    setWeakConcept("None - Great job!");
+  }
+
+  setScreen("results");
+}
 
   return (
     <>
       {screen === "main" && (
-        <MainScreen onBegin={() => setScreen("subjects")} />
+        <MainScreen
+        onBegin={() => {
+        setSubject("");
+        setTopic("");
+        setDifficulty("");
+        setLesson("");
+        setQuestions([]);
+        setScore(0);
+        setWeakConcept("");
+        setScreen("subjects");
+      }}
+    />
       )}
 
       {screen === "subjects" && (
@@ -112,6 +122,7 @@ export default function App() {
             setTopic("");
             setDifficulty("");
             setLesson("");
+            setQuestions([]);
             setScore(0);
             setWeakConcept("");
           }}
@@ -128,6 +139,7 @@ export default function App() {
             setTopic(t);
             setDifficulty("");
             setLesson("");
+            setQuestions([]);
             setScore(0);
             setWeakConcept("");
           }}
