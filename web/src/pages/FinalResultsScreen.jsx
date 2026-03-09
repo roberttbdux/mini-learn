@@ -1,48 +1,28 @@
-export default function ResultsScreen({
-  score,
-  total,
+export default function FinalResultsScreen({
+  originalScore,
+  originalTotal,
+  reinforcementScore,
+  reinforcementTotal,
   weakConcept,
-  onBack,
-  onReviewMistakes,
   onReturnHome,
   onStudyAnotherTopic,
-}){
-
-  const perfectScore = score === total;
-
+}) {
   return (
     <div style={styles.page}>
       <div style={styles.card}>
-        <button style={styles.backBtn} onClick={onBack}>
-          ← Back
-        </button>
-
-        <h2 style={styles.title}>Results</h2>
+        <h2 style={styles.title}>Final Results</h2>
 
         <div style={styles.resultBox}>
-          <p style={styles.score}>
-            Score: {score}/{total}
-          </p>
-
-          {perfectScore ? (
+          <p style={styles.text}>Original score: {originalScore}/{originalTotal}</p>
           <p style={styles.text}>
-            Great work! You answered all questions correctly.
+            Reinforcement score: {reinforcementScore}/{reinforcementTotal}
           </p>
-          ) : (
-          <>
           <p style={styles.text}>
-            Weak concept detected: <b>{weakConcept}</b>
+            Weak concept reviewed: <b>{weakConcept}</b>
           </p>
-
-          <p style={styles.text}>
-            We noticed you struggled with this concept. Review it to improve your understanding.
-          </p>
-          </>
-          )}
+          <p style={styles.text}>You completed the adaptive reinforcement step.</p>
         </div>
 
-        {perfectScore ? (
-        <>
         <button style={styles.primaryBtn} onClick={onReturnHome}>
           Return to Home
         </button>
@@ -50,12 +30,6 @@ export default function ResultsScreen({
         <button style={styles.secondaryBtn} onClick={onStudyAnotherTopic}>
           Study Another Topic
         </button>
-        </>
-        ) : (
-        <button style={styles.primaryBtn} onClick={onReviewMistakes}>
-          Review Mistakes
-        </button>
-        )}
       </div>
     </div>
   );
@@ -77,14 +51,6 @@ const styles = {
     display: "grid",
     gap: 14,
   },
-  backBtn: {
-    width: 90,
-    padding: "8px 10px",
-    borderRadius: 10,
-    border: "1px solid #ddd",
-    background: "#fff",
-    cursor: "pointer",
-  },
   title: {
     margin: 0,
     textAlign: "center",
@@ -97,13 +63,6 @@ const styles = {
     padding: 16,
     display: "grid",
     gap: 10,
-  },
-  score: {
-    fontSize: 22,
-    fontWeight: 700,
-    color: "#111",
-    margin: 0,
-    textAlign: "center",
   },
   text: {
     margin: 0,
