@@ -1,17 +1,12 @@
 const express = require("express");
 const cors = require("cors");
+const OpenAI = require("openai");
 require("dotenv").config();
 
 const app = express();
 
-app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Content-Type");
-  if (req.method === "OPTIONS") {
-    return res.sendStatus(200);
-  }
-  next();
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
 app.use(cors());
@@ -21,44 +16,98 @@ app.get("/health", (req, res) => {
   res.json({ status: "Mini Learn API running" });
 });
 
-app.post("/api/lesson", (req, res) => {
-  const { subject, topic, difficulty } = req.body;
+app.post("/api/lesson", async (req, res) => {
+  try {
+    const { subject, topic, difficulty } = req.body;
 
-  if (!subject || !topic || !difficulty) {
-    return res.status(400).json({
-      error: "subject, topic, and difficulty are required",
+    if (!subject || !topic || !difficulty) {
+      return res.status(400).json({
+        error: "subject, topic, and difficulty are required",
+      });
+    }
+
+    const lessonStyles = [
+      "focus on the causes",
+      "focus on the major events",
+      "focus on important people",
+      "focus on the timeline",
+      "focus on why it mattered",
+      "focus on how the two sides differed",
+      "focus on major turning points",
+      "focus on global impact",
+    ];
+
+    const randomStyle =
+      lessonStyles[Math.floor(Math.random() * lessonStyles.length)];
+
+    let difficultyRules = "";
+
+    if (difficulty === "Easy") {
+      difficultyRules = `
+- Use very simple words
+- Use short sentences
+- Explain only the basic ideas
+- Avoid difficult terms unless briefly explained
+- Keep the lesson easy to understand for a beginner
+`;
+    } else if (difficulty === "Intermediate") {
+      difficultyRules = `
+- Use clear explanations with some detail
+- Include important terms and explain them
+- Add a moderate amount of depth
+- Assume the student knows a little background
+`;
+    } else if (difficulty === "Hard") {
+      difficultyRules = `
+- Use more detailed explanations
+- Include deeper concepts and connections
+- Use proper historical terminology
+- Assume the student already knows the basics
+- Add more analysis, not just simple facts
+`;
+    }
+
+    const response = await openai.responses.create({
+      model: "gpt-4o-mini",
+      input: `
+Write a short study lesson.
+
+Subject: ${subject}
+Topic: ${topic}
+Difficulty: ${difficulty}
+Teaching style: ${randomStyle}
+
+Rules:
+- Use a neutral, informational tone
+- Start directly with the topic
+- Do NOT talk to the reader
+- Do NOT use "you"
+- Do NOT include phrases like "as you prepare"
+- Do NOT give advice or study tips
+- Only present facts and explanation
+- Maximum 2 short paragraphs
+
+Difficulty rules:
+${difficultyRules}
+`,
+    });
+
+    res.json({
+      subject,
+      topic,
+      difficulty,
+      lesson: response.output_text,
+    });
+  } catch (err) {
+    console.error("OpenAI lesson error:", err);
+
+    res.json({
+      subject: req.body.subject,
+      topic: req.body.topic,
+      difficulty: req.body.difficulty,
+      lesson: `(${req.body.difficulty}) ${req.body.topic}: This is a fallback lesson. The topic includes important events, ideas, and people that shaped history.`,
     });
   }
-
-  let lesson = "";
-
-  if (topic === "Cold War") {
-    lesson =
-      `(${difficulty}) Cold War: The Cold War was a long period of tension between the United States and the Soviet Union after World War II. ` +
-      `They did not fight directly, but competed through alliances, propaganda, and conflicts in other countries. ` +
-      `The U.S. used a policy called containment to limit the spread of communism. ` +
-      `Events like the Berlin Blockade, the Korean War, and the Cuban Missile Crisis increased fear of nuclear war. ` +
-      `The Cold War ended as the Soviet Union weakened and collapsed in 1991.`;
-  } else if (topic === "World War 2") {
-    lesson =
-      `(${difficulty}) World War II: World War II was a global war that began in 1939 when Germany invaded Poland. ` +
-      `The main sides were the Allies and the Axis powers. ` +
-      `Major events included the Holocaust, Pearl Harbor, D-Day, and the use of atomic bombs on Japan. ` +
-      `The war caused massive destruction and loss of life across Europe, Asia, and other regions. ` +
-      `It ended in 1945 and changed global politics for decades.`;
-  } else if (topic === "Civil War") {
-    lesson =
-      `(${difficulty}) Civil War: The American Civil War was fought from 1861 to 1865 between the Union and the Confederacy. ` +
-      `Its main causes included slavery, states' rights, and tensions between the North and South. ` +
-      `Abraham Lincoln led the Union during the war. ` +
-      `Important events included the Emancipation Proclamation and major battles such as Gettysburg. ` +
-      `The Union victory preserved the United States and led to the end of slavery.`;
-  } else {
-    lesson =
-      `(${difficulty}) ${topic}: This is a sample lesson for the selected topic.`;
-  }
-
-  res.json({ subject, topic, difficulty, lesson });
 });
 
 app.post("/api/quiz", (req, res) => {
@@ -119,10 +168,10 @@ app.post("/api/quiz", (req, res) => {
         explanation: "Direct war could escalate into nuclear war.",
       },
       {
-        question: "When did the Cold War end (approx.)?",
+        question: "When did the Cold War end?",
         choices: ["1945", "1962", "1991", "2001"],
         answerIndex: 2,
-        explanation: "It ended around the collapse of the Soviet Union in 1991.",
+        explanation: "It ended with the collapse of the Soviet Union in 1991.",
       },
     ];
   } else if (topic === "World War 2") {
@@ -241,10 +290,6 @@ app.post("/api/quiz", (req, res) => {
   res.json({ subject, topic, difficulty, questions });
 });
 
-if (require.main === module) {
-  app.listen(5000, "0.0.0.0", () => {
-    console.log("Server running on http://0.0.0.0:5000");
-  });
-}
-
-module.exports = app;
+app.listen(process.env.PORT || 5000, "0.0.0.0", () => {
+  console.log(`Server running on port ${process.env.PORT || 5000}`);
+});
