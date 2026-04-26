@@ -290,6 +290,10 @@ app.post("/api/quiz", (req, res) => {
   res.json({ subject, topic, difficulty, questions });
 });
 
-app.listen(process.env.PORT || 5000, "0.0.0.0", () => {
-  console.log(`Server running on port ${process.env.PORT || 5000}`);
-});
+if (require.main === module) {
+  app.listen(process.env.PORT || 5000, "0.0.0.0", () => {
+    console.log(`Server running on port ${process.env.PORT || 5000}`);
+  });
+}
+
+module.exports = app;
