@@ -110,7 +110,21 @@ ${difficultyRules}
   }
 });
 
-app.post("/api/quiz", (req, res) => {
+function shuffleChoices(correctAnswer, wrongAnswers) {
+  const choices = [correctAnswer, ...wrongAnswers];
+
+  for (let i = choices.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [choices[i], choices[j]] = [choices[j], choices[i]];
+  }
+
+  return {
+    choices,
+    answerIndex: choices.indexOf(correctAnswer),
+  };
+}
+
+app.post("/api/quiz", async (req, res) => {
   const { subject, topic, difficulty } = req.body;
 
   if (!subject || !topic || !difficulty) {
@@ -119,175 +133,116 @@ app.post("/api/quiz", (req, res) => {
     });
   }
 
-  let questions = [];
+  const fallbackQuestions = [
+    {
+      question: `What is one important idea related to ${topic}?`,
+      choices: [
+        "A main concept from the lesson",
+        "An unrelated topic",
+        "A random date with no context",
+        "A topic from another subject",
+      ],
+      answerIndex: 0,
+      explanation: `This question reviews a main concept from ${topic}.`,
+    },
+  ];
 
-  if (topic === "Cold War") {
-    questions = [
-      {
-        question: "What was the Cold War mainly about?",
-        choices: [
-          "Trade",
-          "Ideological conflict",
-          "Sports rivalry",
-          "Colonial expansion",
-        ],
-        answerIndex: 1,
-        explanation: "It was mainly a conflict between capitalism and communism.",
-      },
-      {
-        question: 'What was "containment"?',
-        choices: [
-          "A peace treaty",
-          "Stopping communism from spreading",
-          "A type of weapon",
-          "A Soviet plan",
-        ],
-        answerIndex: 1,
-        explanation: "Containment was a U.S. policy to limit the spread of communism.",
-      },
-      {
-        question: "Which event brought the world close to nuclear war?",
-        choices: [
-          "Cuban Missile Crisis",
-          "Pearl Harbor",
-          "World War I",
-          "French Revolution",
-        ],
-        answerIndex: 0,
-        explanation: "The Cuban Missile Crisis was a major nuclear standoff.",
-      },
-      {
-        question: "Why did the U.S. and USSR usually avoid direct war?",
-        choices: [
-          "They were allies",
-          "No armies existed",
-          "Nuclear weapons risk",
-          "They were neighbors",
-        ],
-        answerIndex: 2,
-        explanation: "Direct war could escalate into nuclear war.",
-      },
-      {
-        question: "When did the Cold War end?",
-        choices: ["1945", "1962", "1991", "2001"],
-        answerIndex: 2,
-        explanation: "It ended with the collapse of the Soviet Union in 1991.",
-      },
-    ];
-  } else if (topic === "World War 2") {
-    questions = [
-      {
-        question: "What event started World War II?",
-        choices: [
-          "Pearl Harbor",
-          "Germany invading Poland",
-          "The Great Depression",
-          "The Cold War",
-        ],
-        answerIndex: 1,
-        explanation: "World War II began when Germany invaded Poland in 1939.",
-      },
-      {
-        question: "Who were the Axis Powers?",
-        choices: [
-          "USA, UK, France",
-          "Germany, Italy, Japan",
-          "Russia, China, USA",
-          "Germany, France, Spain",
-        ],
-        answerIndex: 1,
-        explanation: "The Axis Powers were Germany, Italy, and Japan.",
-      },
-      {
-        question: "What event brought the U.S. into WWII?",
-        choices: [
-          "D-Day",
-          "Pearl Harbor",
-          "The Berlin Wall",
-          "Cuban Missile Crisis",
-        ],
-        answerIndex: 1,
-        explanation: "Japan attacked Pearl Harbor in 1941, bringing the U.S. into the war.",
-      },
-      {
-        question: "What was D-Day?",
-        choices: [
-          "A bombing campaign",
-          "The invasion of Normandy",
-          "The end of WWII",
-          "The start of the Cold War",
-        ],
-        answerIndex: 1,
-        explanation: "D-Day was the Allied invasion of Normandy in 1944.",
-      },
-      {
-        question: "How did WWII end in the Pacific?",
-        choices: [
-          "Germany surrendered",
-          "Atomic bombs on Japan",
-          "The Cold War",
-          "Treaty of Versailles",
-        ],
-        answerIndex: 1,
-        explanation: "The U.S. dropped atomic bombs on Hiroshima and Nagasaki.",
-      },
-    ];
-  } else if (topic === "Civil War") {
-    questions = [
-      {
-        question: "What was the main cause of the Civil War?",
-        choices: [
-          "Trade disputes",
-          "Slavery and states' rights",
-          "Immigration",
-          "Industrial growth",
-        ],
-        answerIndex: 1,
-        explanation: "Slavery and states' rights were major causes of the Civil War.",
-      },
-      {
-        question: "Who were the Union?",
-        choices: [
-          "Southern states",
-          "Northern states",
-          "European allies",
-          "Native tribes",
-        ],
-        answerIndex: 1,
-        explanation: "The Union was the Northern states.",
-      },
-      {
-        question: "Who was the President of the Union during the Civil War?",
-        choices: [
-          "George Washington",
-          "Abraham Lincoln",
-          "Ulysses Grant",
-          "Thomas Jefferson",
-        ],
-        answerIndex: 1,
-        explanation: "Abraham Lincoln was the president during the Civil War.",
-      },
-      {
-        question: "What did the Emancipation Proclamation do?",
-        choices: [
-          "Ended the war",
-          "Freed enslaved people in Confederate states",
-          "Started the war",
-          "Created the Constitution",
-        ],
-        answerIndex: 1,
-        explanation: "It declared enslaved people free in Confederate states.",
-      },
-      {
-        question: "When did the Civil War end?",
-        choices: ["1776", "1865", "1914", "1945"],
-        answerIndex: 1,
-        explanation: "The Civil War ended in 1865.",
-      },
-    ];
+  if (!openai) {
+    return res.json({
+      subject,
+      topic,
+      difficulty,
+      questions: fallbackQuestions,
+    });
   }
 
-  res.json({ subject, topic, difficulty, questions });
+  try {
+    const prompt = `
+You are creating a quiz for an educational app.
+
+Subject: ${subject}
+Topic: ${topic}
+Difficulty: ${difficulty}
+
+Generate exactly 5 multiple choice questions.
+
+Return ONLY valid JSON in this exact format:
+{
+  "questions": [
+    {
+      "question": "Question text here",
+      "correctAnswer": "Correct answer text here",
+      "wrongAnswers": [
+        "Wrong answer 1",
+        "Wrong answer 2",
+        "Wrong answer 3"
+      ],
+      "explanation": "Short explanation here"
+    }
+  ]
+}
+
+Rules:
+- Each question must have exactly 1 correct answer and 3 wrong answers.
+- Wrong answers should be plausible but clearly incorrect.
+- Do not label choices A, B, C, or D.
+- Do not include answerIndex.
+- Keep explanations short.
+- Make questions match the selected difficulty.
+`;
+
+    const response = await openai.responses.create({
+      model: "gpt-4.1-mini",
+      input: prompt,
+    });
+
+    const text = response.output_text.trim();
+    const data = JSON.parse(text);
+
+    if (!data.questions || !Array.isArray(data.questions)) {
+      throw new Error("Invalid quiz format returned by AI");
+    }
+
+    const questions = data.questions.slice(0, 5).map((q) => {
+      if (
+        !q.question ||
+        !q.correctAnswer ||
+        !Array.isArray(q.wrongAnswers) ||
+        q.wrongAnswers.length < 3 ||
+        !q.explanation
+      ) {
+        throw new Error("Invalid question format returned by AI");
+      }
+
+      const { choices, answerIndex } = shuffleChoices(
+        q.correctAnswer,
+        q.wrongAnswers.slice(0, 3)
+      );
+
+      return {
+        question: q.question,
+        choices,
+        answerIndex,
+        explanation: q.explanation,
+      };
+    });
+
+    res.json({
+      subject,
+      topic,
+      difficulty,
+      questions,
+    });
+  } catch (error) {
+    console.error("OpenAI quiz error:", error.message);
+
+    res.json({
+      subject,
+      topic,
+      difficulty,
+      questions: fallbackQuestions,
+    });
+  }
 });
 
 if (require.main === module) {
