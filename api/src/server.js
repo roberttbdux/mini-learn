@@ -148,12 +148,29 @@ app.post("/api/quiz", async (req, res) => {
   ];
 
   try {
+  const quizSeed = Math.random().toString(36).substring(2, 10);
+
+const quizFocusOptions = [
+  "major events",
+  "important people",
+  "causes and effects",
+  "timeline and sequence",
+  "key terms",
+  "turning points",
+  "long-term impact",
+];
+
+  const quizFocus =
+  quizFocusOptions[Math.floor(Math.random() * quizFocusOptions.length)];
+
     const prompt = `
 You are creating a quiz for an educational app.
 
 Subject: ${subject}
 Topic: ${topic}
 Difficulty: ${difficulty}
+Quiz variation seed: ${quizSeed}
+Quiz focus: ${quizFocus}
 
 Generate exactly 5 multiple choice questions.
 
@@ -180,6 +197,9 @@ Rules:
 - Do not include answerIndex.
 - Keep explanations short.
 - Make questions match the selected difficulty.
+- Generate a new variation of questions each time.
+- Do not reuse the same question wording from previous attempts.
+- Focus this quiz more on: ${quizFocus}.
 `;
 
     const response = await openai.responses.create({
