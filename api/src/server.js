@@ -147,15 +147,6 @@ app.post("/api/quiz", async (req, res) => {
     },
   ];
 
-  if (!openai) {
-    return res.json({
-      subject,
-      topic,
-      difficulty,
-      questions: fallbackQuestions,
-    });
-  }
-
   try {
     const prompt = `
 You are creating a quiz for an educational app.
@@ -196,8 +187,7 @@ Rules:
       input: prompt,
     });
 
-    const text = response.output_text.trim();
-    const data = JSON.parse(text);
+    const data = JSON.parse(response.output_text.trim());
 
     if (!data.questions || !Array.isArray(data.questions)) {
       throw new Error("Invalid quiz format returned by AI");
@@ -235,6 +225,212 @@ Rules:
     });
   } catch (error) {
     console.error("OpenAI quiz error:", error.message);
+
+    res.json({
+      subject,
+      topic,
+      difficulty,
+      questions: fallbackQuestions,
+    });
+  }
+});
+
+app.post("/api/reinforcement-lesson", async (req, res) => {
+  const { subject, topic, difficulty, missedQuestions } = req.body;
+
+  if (!subject || !topic || !difficulty || !Array.isArray(missedQuestions)) {
+    return res.status(400).json({
+      error: "subject, topic, difficulty, and missedQuestions are required",
+    });
+  }
+
+  try {
+    const amount = missedQuestions.length;
+
+    const prompt = `
+You are creating a short review lesson for a student.
+
+Subject: ${subject}
+Topic: ${topic}
+Difficulty: ${difficulty}
+
+The student missed these questions:
+${JSON.stringify(missedQuestions, null, 2)}
+
+Generate EXACTLY ${amount} mini lessons.
+
+Return ONLY valid JSON in this exact format:
+{
+  "lessons": [
+    "Mini lesson 1",
+    "Mini lesson 2"
+  ]
+}
+
+Rules:
+- You MUST return exactly ${amount} lessons, no more and no less.
+- Each lesson should be 1-2 sentences.
+- Each lesson must match one missed question.
+- Explain the concept, not just the answer.
+- Do NOT say "the answer is..."
+- Do NOT repeat the exact question.
+- Use simple student-friendly language.
+- Match the selected difficulty.
+`;
+
+    const response = await openai.responses.create({
+      model: "gpt-4.1-mini",
+      input: prompt,
+    });
+
+    let data = JSON.parse(response.output_text.trim());
+
+    if (!data.lessons || !Array.isArray(data.lessons)) {
+      throw new Error("Invalid reinforcement lesson format returned by AI");
+    }
+
+    if (data.lessons.length > amount) {
+      data.lessons = data.lessons.slice(0, amount);
+    }
+
+    while (data.lessons.length < amount) {
+      data.lessons.push(
+        `Review the concept carefully for ${topic} before trying again.`
+      );
+    }
+
+    res.json({
+      subject,
+      topic,
+      difficulty,
+      lessons: data.lessons,
+    });
+  } catch (error) {
+    console.error("OpenAI reinforcement lesson error:", error.message);
+
+    const fallbackLessons = missedQuestions.map(
+      () =>
+        `Review the main idea of ${topic}. Focus on understanding the concept before trying again.`
+    );
+
+    res.json({
+      subject,
+      topic,
+      difficulty,
+      lessons: fallbackLessons,
+    });
+  }
+});
+
+app.post("/api/reinforcement", async (req, res) => {
+  const { subject, topic, difficulty, missedQuestions } = req.body;
+
+  if (!subject || !topic || !difficulty || !Array.isArray(missedQuestions)) {
+    return res.status(400).json({
+      error: "subject, topic, difficulty, and missedQuestions are required",
+    });
+  }
+
+  const fallbackQuestions = [
+    {
+      question: `Which idea from ${topic} should be reviewed again?`,
+      choices: [
+        "The missed concept",
+        "An unrelated subject",
+        "A random topic",
+        "A different class",
+      ],
+      answerIndex: 0,
+      explanation: `This reviews a concept the student missed from ${topic}.`,
+    },
+  ];
+
+  try {
+    const amount = Math.max(1, Math.min(missedQuestions.length, 3));
+
+    const prompt = `
+You are creating reinforcement questions for a student.
+
+Subject: ${subject}
+Topic: ${topic}
+Difficulty: ${difficulty}
+
+The student missed these questions:
+${JSON.stringify(missedQuestions, null, 2)}
+
+Generate exactly ${amount} multiple choice reinforcement questions.
+
+Return ONLY valid JSON in this exact format:
+{
+  "questions": [
+    {
+      "question": "Question text here",
+      "correctAnswer": "Correct answer text here",
+      "wrongAnswers": [
+        "Wrong answer 1",
+        "Wrong answer 2",
+        "Wrong answer 3"
+      ],
+      "explanation": "Short explanation here"
+    }
+  ]
+}
+
+Rules:
+- Focus on the concept the student missed.
+- Do NOT copy or restate the weak concept directly.
+- Ask the question in a different way.
+- Make the student think, not just recall a sentence.
+- Avoid obvious or word-for-word answers.
+- Each question must have 1 correct and 3 wrong answers.
+- Wrong answers should be believable.
+- Keep explanations short.
+- Avoid using the exact same wording as the missed question or explanation.
+`;
+
+    const response = await openai.responses.create({
+      model: "gpt-4.1-mini",
+      input: prompt,
+    });
+
+    const data = JSON.parse(response.output_text.trim());
+
+    if (!data.questions || !Array.isArray(data.questions)) {
+      throw new Error("Invalid reinforcement format returned by AI");
+    }
+
+    const questions = data.questions.slice(0, amount).map((q) => {
+      if (
+        !q.question ||
+        !q.correctAnswer ||
+        !Array.isArray(q.wrongAnswers) ||
+        q.wrongAnswers.length < 3 ||
+        !q.explanation
+      ) {
+        throw new Error("Invalid reinforcement question format returned by AI");
+      }
+
+      const { choices, answerIndex } = shuffleChoices(
+        q.correctAnswer,
+        q.wrongAnswers.slice(0, 3)
+      );
+
+      return {
+        question: q.question,
+        choices,
+        answerIndex,
+        explanation: q.explanation,
+      };
+    });
+
+    res.json({
+      subject,
+      topic,
+      difficulty,
+      questions,
+    });
+  } catch (error) {
+    console.error("OpenAI reinforcement error:", error.message);
 
     res.json({
       subject,

@@ -2,7 +2,6 @@ import { useState } from "react";
 
 export default function ReinforcementScreen({
   topic,
-  weakConcept,
   questions,
   onBack,
   onFinish,
@@ -48,9 +47,11 @@ export default function ReinforcementScreen({
           ← Back
         </button>
 
-        <h2 style={styles.title}>Review Weak Concept</h2>
+        <h2 style={styles.title}>Review Missed Concept</h2>
         <p style={styles.subtext}>Topic: {topic}</p>
-        <p style={styles.subtext}>Weak concept: {weakConcept}</p>
+        <p style={styles.subtext}>
+          Answer these questions to review what you missed.
+        </p>
 
         <div style={styles.questionBox}>
           <p style={styles.questionNumber}>
