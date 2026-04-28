@@ -2,7 +2,6 @@ export default function ResultsScreen({
   score,
   total,
   missedQuestions,
-  onBack,
   onReviewMistakes,
   onReturnHome,
   onStudyAnotherTopic,
@@ -12,9 +11,7 @@ export default function ResultsScreen({
   return (
     <div style={styles.page}>
       <div style={styles.card}>
-        <button style={styles.backBtn} onClick={onBack}>
-          ← Back
-        </button>
+       
 
         <h2 style={styles.title}>Results</h2>
 

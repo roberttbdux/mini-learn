@@ -256,7 +256,6 @@ export default function App() {
           total={questions.length}
           missedQuestions={missedQuestions}
           weakConcept={weakConcept}
-          onBack={() => setScreen("practice")}
           onReviewMistakes={handleStartReinforcement}
           onReturnHome={() => setScreen("main")}
           onStudyAnotherTopic={() => setScreen("topics")}
