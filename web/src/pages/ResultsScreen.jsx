@@ -1,21 +1,17 @@
 export default function ResultsScreen({
   score,
   total,
-  weakConcept,
-  onBack,
+  missedQuestions,
   onReviewMistakes,
   onReturnHome,
   onStudyAnotherTopic,
-}){
-
+}) {
   const perfectScore = score === total;
 
   return (
     <div style={styles.page}>
       <div style={styles.card}>
-        <button style={styles.backBtn} onClick={onBack}>
-          ← Back
-        </button>
+       
 
         <h2 style={styles.title}>Results</h2>
 
@@ -25,36 +21,51 @@ export default function ResultsScreen({
           </p>
 
           {perfectScore ? (
-          <p style={styles.text}>
-            Great work! You answered all questions correctly.
-          </p>
+            <p style={styles.text}>
+              Great work! You answered all questions correctly.
+            </p>
           ) : (
-          <>
-          <p style={styles.text}>
-            Weak concept detected: <b>{weakConcept}</b>
-          </p>
+            <>
+              <p style={styles.text}>
+                You missed {missedQuestions.length} question
+                {missedQuestions.length > 1 ? "s" : ""}.
+              </p>
 
-          <p style={styles.text}>
-            We noticed you struggled with this concept. Review it to improve your understanding.
-          </p>
-          </>
+              <div style={styles.missedList}>
+                {missedQuestions.map((item, index) => (
+                  <div key={index} style={styles.missedItem}>
+                    <p style={styles.question}>
+                      {index + 1}. {item.question}
+                    </p>
+
+                    <p style={styles.userAnswer}>
+                      Your answer: <b>{item.yourAnswer}</b>
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              <p style={styles.text}>
+                Review these concepts to improve your understanding.
+              </p>
+            </>
           )}
         </div>
 
         {perfectScore ? (
-        <>
-        <button style={styles.primaryBtn} onClick={onReturnHome}>
-          Return to Home
-        </button>
+          <>
+            <button style={styles.primaryBtn} onClick={onReturnHome}>
+              Return to Home
+            </button>
 
-        <button style={styles.secondaryBtn} onClick={onStudyAnotherTopic}>
-          Study Another Topic
-        </button>
-        </>
+            <button style={styles.secondaryBtn} onClick={onStudyAnotherTopic}>
+              Study Another Topic
+            </button>
+          </>
         ) : (
-        <button style={styles.primaryBtn} onClick={onReviewMistakes}>
-          Review Mistakes
-        </button>
+          <button style={styles.primaryBtn} onClick={onReviewMistakes}>
+            Review Mistakes
+          </button>
         )}
       </div>
     </div>
@@ -110,6 +121,27 @@ const styles = {
     color: "#111",
     lineHeight: 1.5,
     textAlign: "center",
+  },
+  missedList: {
+    display: "grid",
+    gap: 12,
+    marginTop: 10,
+  },
+  missedItem: {
+    border: "1px solid #eee",
+    borderRadius: 12,
+    padding: 10,
+    background: "#fafafa",
+  },
+  question: {
+    margin: 0,
+    fontWeight: 600,
+    color: "#111",
+  },
+  userAnswer: {
+    margin: 0,
+    color: "#444",
+    marginTop: 4,
   },
   primaryBtn: {
     width: "100%",

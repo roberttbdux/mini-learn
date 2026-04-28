@@ -6,6 +6,7 @@ import DifficultySelection from "./pages/DifficultySelection";
 import LessonScreen from "./pages/LessonScreen";
 import PracticeScreen from "./pages/PracticeScreen";
 import ResultsScreen from "./pages/ResultsScreen";
+import ReinforcementLessonScreen from "./pages/ReinforcementLessonScreen";
 import ReinforcementScreen from "./pages/ReinforcementScreen";
 import FinalResultsScreen from "./pages/FinalResultsScreen";
 
@@ -22,221 +23,173 @@ export default function App() {
   const [weakConcept, setWeakConcept] = useState("");
 
   const [questions, setQuestions] = useState([]);
+  const [practiceAnswers, setPracticeAnswers] = useState([]);
+  const [missedQuestions, setMissedQuestions] = useState([]);
 
+  const [reinforcementLessons, setReinforcementLessons] = useState([]);
   const [reinforcementQuestions, setReinforcementQuestions] = useState([]);
   const [reinforcementScore, setReinforcementScore] = useState(0);
   const [originalScore, setOriginalScore] = useState(0);
 
-  async function handleDifficultyContinue() {
-  if (!subject || !topic || !difficulty) return;
-
-  setLoading(true);
-  setWeakConcept("");
-  setReinforcementQuestions([]);
-  setReinforcementScore(0);
-  setOriginalScore(0);
-
-  try {
-    const lessonResponse = await fetch("/api/lesson", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        subject,
-        topic,
-        difficulty,
-      }),
-    });
-
-    if (!lessonResponse.ok) {
-      throw new Error("Failed to fetch lesson");
-    }
-
-    const lessonData = await lessonResponse.json();
-
-    const quizResponse = await fetch("/api/quiz", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        subject,
-        topic,
-        difficulty,
-      }),
-    });
-
-    if (!quizResponse.ok) {
-      throw new Error("Failed to fetch quiz");
-    }
-
-    const quizData = await quizResponse.json();
-
-    setLesson(lessonData.lesson || "");
-    setQuestions(quizData.questions || []);
-    setScreen("lesson");
-  } catch (error) {
-    console.error("Error loading lesson/quiz:", error);
-    alert("Could not load lesson and quiz. Please try again.");
-  } finally {
-    setLoading(false);
+  function resetProgress() {
+    setLesson("");
+    setQuestions([]);
+    setPracticeAnswers([]);
+    setMissedQuestions([]);
+    setReinforcementLessons([]);
+    setReinforcementQuestions([]);
+    setScore(0);
+    setReinforcementScore(0);
+    setOriginalScore(0);
+    setWeakConcept("");
   }
-}
+
+  async function handleDifficultyContinue() {
+    if (!subject || !topic || !difficulty) return;
+
+    setLoading(true);
+    resetProgress();
+
+    try {
+      const lessonResponse = await fetch("/api/lesson", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subject, topic, difficulty }),
+      });
+
+      const lessonData = await lessonResponse.json();
+
+      const quizResponse = await fetch("/api/quiz", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subject, topic, difficulty }),
+      });
+
+      const quizData = await quizResponse.json();
+
+      setLesson(lessonData.lesson || "");
+      setQuestions(quizData.questions || []);
+      setScreen("lesson");
+    } catch (error) {
+      console.error(error);
+      alert("Failed to load lesson/quiz");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   function handlePracticeFinish(userAnswers) {
-  let correctCount = 0;
-  let firstMissedQuestion = null;
+    setPracticeAnswers(userAnswers);
 
-  userAnswers.forEach((answer, index) => {
-    if (answer === questions[index]?.answerIndex) {
-      correctCount++;
-    } else if (!firstMissedQuestion) {
-      firstMissedQuestion = questions[index];
+    let correctCount = 0;
+    const missed = [];
+
+    userAnswers.forEach((answer, index) => {
+      const question = questions[index];
+
+      if (answer === question?.answerIndex) {
+        correctCount++;
+      } else if (question) {
+        missed.push({
+          question: question.question,
+          yourAnswer:
+            answer !== null && answer !== undefined
+              ? question.choices[answer]
+              : "No answer selected",
+          explanation: question.explanation,
+          answerIndex: question.answerIndex,
+          choices: question.choices,
+        });
+      }
+    });
+
+    setMissedQuestions(missed);
+    setScore(correctCount);
+    setOriginalScore(correctCount);
+
+    if (missed.length > 0) {
+      setWeakConcept(missed[0].explanation || missed[0].question);
+    } else {
+      setWeakConcept("None - Great job!");
     }
-  });
 
-  setScore(correctCount);
-  setOriginalScore(correctCount);
-
-  if (firstMissedQuestion) {
-    setWeakConcept(firstMissedQuestion.explanation || firstMissedQuestion.question);
-  } else {
-    setWeakConcept("None - Great job!");
+    setScreen("results");
   }
 
-  setScreen("results");
-}
+  async function handleStartReinforcement() {
+    try {
+      if (missedQuestions.length === 0) {
+        setReinforcementLessons([]);
+        setReinforcementQuestions([]);
+        setScreen("reinforcement");
+        return;
+      }
 
-  function getReinforcementQuestions(topic) {
-  if (topic === "Cold War") {
-    return [
-      {
-        question: "What was the main goal of containment?",
-        choices: [
-          "To expand communism",
-          "To stop communism from spreading",
-          "To end World War I",
-          "To create NATO",
-        ],
-        answerIndex: 1,
-        explanation: "Containment was meant to stop the spread of communism.",
-      },
-      {
-        question: "Why did the U.S. and USSR avoid direct war?",
-        choices: [
-          "They were allies",
-          "They had no armies",
-          "Nuclear war risk",
-          "They shared the same goals",
-        ],
-        answerIndex: 2,
-        explanation: "Direct conflict could have escalated into nuclear war.",
-      },
-    ];
-  }
+      setLoading(true);
 
-  if (topic === "World War 2") {
-    return [
-      {
-        question: "What event brought the U.S. into World War II?",
-        choices: [
-          "D-Day",
-          "Pearl Harbor",
-          "The Great Depression",
-          "The Berlin Wall",
-        ],
-        answerIndex: 1,
-        explanation: "The U.S. entered WWII after the attack on Pearl Harbor.",
-      },
-      {
-        question: "What was D-Day?",
-        choices: [
-          "The invasion of Normandy",
-          "The end of WWII",
-          "The bombing of Hiroshima",
-          "The start of the Cold War",
-        ],
-        answerIndex: 0,
-        explanation: "D-Day was the Allied invasion of Normandy in 1944.",
-      },
-    ];
-  }
+      const lessonResponse = await fetch("/api/reinforcement-lesson", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subject,
+          topic,
+          difficulty,
+          missedQuestions,
+        }),
+      });
 
-  if (topic === "Civil War") {
-    return [
-      {
-        question: "What was a major cause of the Civil War?",
-        choices: [
-          "Trade only",
-          "Slavery and states' rights",
-          "Immigration",
-          "Foreign invasion",
-        ],
-        answerIndex: 1,
-        explanation: "Slavery and states' rights were major causes of the Civil War.",
-      },
-      {
-        question: "Who led the Union during the Civil War?",
-        choices: [
-          "George Washington",
-          "Abraham Lincoln",
-          "Thomas Jefferson",
-          "Robert E. Lee",
-        ],
-        answerIndex: 1,
-        explanation: "Abraham Lincoln was president during the Civil War.",
-      },
-    ];
-  }
+      const lessonData = await lessonResponse.json();
 
-  return [
-    {
-      question: "What concept should you review from this topic?",
-      choices: ["Main idea", "Random detail", "Unrelated topic", "None"],
-      answerIndex: 0,
-      explanation: "This question is a fallback reinforcement question.",
-    },
-  ];
-}
+      const questionResponse = await fetch("/api/reinforcement", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          subject,
+          topic,
+          difficulty,
+          missedQuestions,
+        }),
+      });
 
-  function handleStartReinforcement() {
-  setReinforcementQuestions(getReinforcementQuestions(topic));
-  setReinforcementScore(0);
-  setScreen("reinforcement");
-}
+      const questionData = await questionResponse.json();
 
-function handleReinforcementFinish(userAnswers) {
-  let correctCount = 0;
-
-  userAnswers.forEach((answer, index) => {
-    if (answer === reinforcementQuestions[index]?.answerIndex) {
-      correctCount++;
+      setReinforcementLessons(lessonData.lessons || []);
+      setReinforcementQuestions(questionData.questions || []);
+      setReinforcementScore(0);
+      setScreen("reinforcementLesson");
+    } catch (error) {
+      console.error(error);
+      alert("Failed to load reinforcement lesson/questions");
+    } finally {
+      setLoading(false);
     }
-  });
+  }
 
-  setReinforcementScore(correctCount);
-  setScreen("finalResults");
-}
+  function handleReinforcementFinish(userAnswers) {
+    let correctCount = 0;
+
+    userAnswers.forEach((answer, index) => {
+      if (answer === reinforcementQuestions[index]?.answerIndex) {
+        correctCount++;
+      }
+    });
+
+    setReinforcementScore(correctCount);
+    setScreen("finalResults");
+  }
 
   return (
     <>
       {screen === "main" && (
         <MainScreen
-        onBegin={() => {
-        setSubject("");
-        setTopic("");
-        setDifficulty("");
-        setLesson("");
-        setQuestions([]);
-        setReinforcementQuestions([]);
-        setScore(0);
-        setReinforcementScore(0);
-        setOriginalScore(0);
-        setWeakConcept("");
-        setScreen("subjects");
-      }}
-    />
+          onBegin={() => {
+            setSubject("");
+            setTopic("");
+            setDifficulty("");
+            resetProgress();
+            setScreen("subjects");
+          }}
+        />
       )}
 
       {screen === "subjects" && (
@@ -246,13 +199,7 @@ function handleReinforcementFinish(userAnswers) {
             setSubject(s);
             setTopic("");
             setDifficulty("");
-            setLesson("");
-            setQuestions([]);
-            setReinforcementQuestions([]);
-            setScore(0);
-            setReinforcementScore(0);
-            setOriginalScore(0);
-            setWeakConcept("");
+            resetProgress();
           }}
           onBack={() => setScreen("main")}
           onContinue={() => setScreen("topics")}
@@ -266,13 +213,7 @@ function handleReinforcementFinish(userAnswers) {
           setTopic={(t) => {
             setTopic(t);
             setDifficulty("");
-            setLesson("");
-            setQuestions([]);
-            setReinforcementQuestions([]);
-            setScore(0);
-            setReinforcementScore(0);
-            setOriginalScore(0);
-            setWeakConcept("");
+            resetProgress();
           }}
           onBack={() => setScreen("subjects")}
           onContinue={() => setScreen("difficulty")}
@@ -313,39 +254,47 @@ function handleReinforcementFinish(userAnswers) {
         <ResultsScreen
           score={score}
           total={questions.length}
+          missedQuestions={missedQuestions}
           weakConcept={weakConcept}
-          onBack={() => setScreen("practice")}
           onReviewMistakes={handleStartReinforcement}
           onReturnHome={() => setScreen("main")}
           onStudyAnotherTopic={() => setScreen("topics")}
         />
       )}
 
+      {screen === "reinforcementLesson" && (
+        <ReinforcementLessonScreen
+          topic={topic}
+          lessons={reinforcementLessons}
+          onBack={() => setScreen("results")}
+          onStartQuestions={() => setScreen("reinforcement")}
+        />
+      )}
+
       {screen === "reinforcement" && (
         <ReinforcementScreen
-        topic={topic}
-        weakConcept={weakConcept}
-        questions={reinforcementQuestions}
-        onBack={() => setScreen("results")}
-        onFinish={handleReinforcementFinish}
+          topic={topic}
+          questions={reinforcementQuestions}
+          onBack={() => setScreen("results")}
+          onFinish={handleReinforcementFinish}
         />
       )}
 
       {screen === "finalResults" && (
         <FinalResultsScreen
-        originalScore={originalScore}
-        originalTotal={questions.length}
-        reinforcementScore={reinforcementScore}
-        reinforcementTotal={reinforcementQuestions.length}
-        weakConcept={weakConcept}
-        onReturnHome={() => setScreen("main")}
-        onStudyAnotherTopic={() => setScreen("topics")}
+          originalScore={originalScore}
+          originalTotal={questions.length}
+          reinforcementScore={reinforcementScore}
+          reinforcementTotal={reinforcementQuestions.length}
+          weakConcept={weakConcept}
+          onReturnHome={() => setScreen("main")}
+          onStudyAnotherTopic={() => setScreen("topics")}
         />
       )}
 
       {loading && (
         <div style={loadingStyles.overlay}>
-          <div style={loadingStyles.box}>Generating lesson...</div>
+          <div style={loadingStyles.box}>Generating...</div>
         </div>
       )}
     </>
