@@ -192,7 +192,12 @@ Return ONLY valid JSON in this exact format:
 
 Rules:
 - Each question must have exactly 1 correct answer and 3 wrong answers.
-- Wrong answers should be plausible but clearly incorrect.
+- All 4 answer choices must be directly related to the selected subject and topic.
+- Wrong answers must be plausible misconceptions within the same subject area, not random unrelated ideas.
+- Do NOT use answer choices from unrelated subjects, time periods, concepts, or categories.
+- Every answer choice must sound like it could reasonably belong in a lesson about ${subject}: ${topic}.
+- Wrong answers should be believable, but still clearly incorrect.
+- Avoid obviously silly, impossible, or unrelated distractors.
 - Do not label choices A, B, C, or D.
 - Do not include answerIndex.
 - Keep explanations short.
