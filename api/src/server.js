@@ -148,12 +148,29 @@ app.post("/api/quiz", async (req, res) => {
   ];
 
   try {
+  const quizSeed = Math.random().toString(36).substring(2, 10);
+
+const quizFocusOptions = [
+  "major events",
+  "important people",
+  "causes and effects",
+  "timeline and sequence",
+  "key terms",
+  "turning points",
+  "long-term impact",
+];
+
+  const quizFocus =
+  quizFocusOptions[Math.floor(Math.random() * quizFocusOptions.length)];
+
     const prompt = `
 You are creating a quiz for an educational app.
 
 Subject: ${subject}
 Topic: ${topic}
 Difficulty: ${difficulty}
+Quiz variation seed: ${quizSeed}
+Quiz focus: ${quizFocus}
 
 Generate exactly 5 multiple choice questions.
 
@@ -175,11 +192,19 @@ Return ONLY valid JSON in this exact format:
 
 Rules:
 - Each question must have exactly 1 correct answer and 3 wrong answers.
-- Wrong answers should be plausible but clearly incorrect.
+- All 4 answer choices must be directly related to the selected subject and topic.
+- Wrong answers must be plausible misconceptions within the same subject area, not random unrelated ideas.
+- Do NOT use answer choices from unrelated subjects, time periods, concepts, or categories.
+- Every answer choice must sound like it could reasonably belong in a lesson about ${subject}: ${topic}.
+- Wrong answers should be believable, but still clearly incorrect.
+- Avoid obviously silly, impossible, or unrelated distractors.
 - Do not label choices A, B, C, or D.
 - Do not include answerIndex.
 - Keep explanations short.
 - Make questions match the selected difficulty.
+- Generate a new variation of questions each time.
+- Do not reuse the same question wording from previous attempts.
+- Focus this quiz more on: ${quizFocus}.
 `;
 
     const response = await openai.responses.create({
