@@ -18,7 +18,7 @@ app.get("/health", (req, res) => {
 
 app.post("/api/lesson", async (req, res) => {
   try {
-    const { subject, topic, difficulty } = req.body;
+    const { subject, topic, difficulty, previousLessons = [] } = req.body;
 
     if (!subject || !topic || !difficulty) {
       return res.status(400).json({
@@ -26,70 +26,128 @@ app.post("/api/lesson", async (req, res) => {
       });
     }
 
-    const lessonStyles = [
-      "focus on the causes",
-      "focus on the major events",
-      "focus on important people",
-      "focus on the timeline",
-      "focus on why it mattered",
-      "focus on how the two sides differed",
-      "focus on major turning points",
-      "focus on global impact",
-    ];
+    let lessonAngles = [];
 
-    const randomStyle =
-      lessonStyles[Math.floor(Math.random() * lessonStyles.length)];
+    if (difficulty === "Easy") {
+      lessonAngles = [
+        "basic overview",
+        "simple timeline",
+        "main people or groups",
+        "why it matters in simple words",
+      ];
+    } else if (difficulty === "Intermediate") {
+      lessonAngles = [
+        "causes and effects",
+        "important people or groups",
+        "timeline of events",
+        "major turning points",
+      ];
+    } else if (difficulty === "Hard") {
+      lessonAngles = [
+        "deeper causes and effects",
+        "major turning points",
+        "long-term impact",
+        "connections between events",
+      ];
+    } else {
+      lessonAngles = ["basic overview"];
+    }
+
+    const randomAngle =
+      lessonAngles[Math.floor(Math.random() * lessonAngles.length)];
+
+    const lessonSeed = Math.random().toString(36).substring(2, 10);
+
+    const oldLessonsForSameTopic = previousLessons
+      .filter(
+        (item) =>
+          item.subject === subject &&
+          item.topic === topic &&
+          item.difficulty === difficulty
+      )
+      .slice(-3)
+      .map((item, index) => `Previous lesson ${index + 1}:\n${item.lesson}`)
+      .join("\n\n---\n\n");
 
     let difficultyRules = "";
 
     if (difficulty === "Easy") {
       difficultyRules = `
-- Use very simple words
-- Use short sentences
-- Explain only the basic ideas
-- Avoid difficult terms unless briefly explained
-- Keep the lesson easy to understand for a beginner
+- Write exactly 2 short paragraphs.
+- Each paragraph must be 2 short sentences.
+- Use simple words.
+- Explain only the main idea.
+- Avoid too many dates, names, or advanced details.
+- Do not use phrases like "key terms include."
+- Do not define many terms in a list.
+- Focus on a simple explanation, not vocabulary.
 `;
     } else if (difficulty === "Intermediate") {
       difficultyRules = `
-- Use clear explanations with some detail
-- Include important terms and explain them
-- Add a moderate amount of depth
-- Assume the student knows a little background
+- Write exactly 3 short paragraphs.
+- Each paragraph must be 2 short sentences.
+- Give more detail than Easy mode, but keep it readable.
+- Include only the most important people, events, or causes.
+- Explain one simple cause/effect connection.
+- Do not write like a textbook.
+- Do not include long lists of names, countries, or terms.
 `;
     } else if (difficulty === "Hard") {
       difficultyRules = `
-- Use more detailed explanations
-- Include deeper concepts and connections
-- Use proper historical terminology
-- Assume the student already knows the basics
-- Add more analysis, not just simple facts
+- Write exactly 4 short paragraphs.
+- Each paragraph must be 2 short sentences.
+- Give deeper explanation than Intermediate, but keep it concise.
+- Include causes, effects, and why the topic mattered.
+- Use proper terms only when needed, and explain them simply.
+- Do not write long textbook-style paragraphs.
+- Do not include too many details at once.
+`;
+    } else {
+      difficultyRules = `
+- Write exactly 2 short paragraphs.
+- Each paragraph must be 2 short sentences.
+- Use clear and simple language.
+- Explain the main idea of the topic.
 `;
     }
 
-    const response = await openai.responses.create({
-      model: "gpt-4o-mini",
-      input: `
-Write a short study lesson.
+    const prompt = `
+Write a study lesson for an educational app.
 
 Subject: ${subject}
 Topic: ${topic}
 Difficulty: ${difficulty}
-Teaching style: ${randomStyle}
+Lesson angle: ${randomAngle}
+Lesson variation seed: ${lessonSeed}
 
-Rules:
-- Use a neutral, informational tone
-- Start directly with the topic
-- Do NOT talk to the reader
-- Do NOT use "you"
-- Do NOT include phrases like "as you prepare"
-- Do NOT give advice or study tips
-- Only present facts and explanation
-- Maximum 2 short paragraphs
+Previous lessons already shown for this same subject, topic, and difficulty:
+${oldLessonsForSameTopic || "None"}
+
+Main rules:
+- Start directly with the topic.
+- Do not say "Here is a lesson."
+- Do not talk to the reader.
+- Do not use "you."
+- Do not give study advice.
+- Do not tell a story unless the topic requires historical context.
+- Do not repeat the same idea in multiple paragraphs.
+- Each paragraph must teach one small part of the topic.
+- Separate each paragraph with a blank line.
+- Keep the full lesson short enough to read in under 1 minute.
+- Use a neutral, informational tone.
+- Stay focused on ${subject}: ${topic}.
+- Avoid repeating previous lessons.
+- Use different wording from previous lessons.
+- Use a different focus or example from previous lessons when possible.
+- If previous lessons were basic overviews, focus on a different simple part of the topic.
 
 Difficulty rules:
 ${difficultyRules}
-`,
+`;
+
+    const response = await openai.responses.create({
+      model: "gpt-4.1-mini",
+      input: prompt,
     });
 
     res.json({
@@ -99,13 +157,13 @@ ${difficultyRules}
       lesson: response.output_text,
     });
   } catch (err) {
-    console.error("OpenAI lesson error:", err);
+    console.error("OpenAI lesson error:", err.message);
 
     res.json({
       subject: req.body.subject,
       topic: req.body.topic,
       difficulty: req.body.difficulty,
-      lesson: `(${req.body.difficulty}) ${req.body.topic}: This is a fallback lesson. The topic includes important events, ideas, and people that shaped history.`,
+      lesson: `(${req.body.difficulty}) ${req.body.topic}: This is a fallback lesson. The topic includes important events, ideas, and people that shaped the subject.`,
     });
   }
 });
@@ -125,43 +183,30 @@ function shuffleChoices(correctAnswer, wrongAnswers) {
 }
 
 app.post("/api/quiz", async (req, res) => {
-  const { subject, topic, difficulty } = req.body;
+  const { subject, topic, difficulty, lesson } = req.body;
 
-  if (!subject || !topic || !difficulty) {
+  if (!subject || !topic || !difficulty || !lesson) {
     return res.status(400).json({
-      error: "subject, topic, and difficulty are required",
+      error: "subject, topic, difficulty, and lesson are required",
     });
   }
 
   const fallbackQuestions = [
     {
-      question: `What is one important idea related to ${topic}?`,
+      question: `According to the lesson, what is one main idea about ${topic}?`,
       choices: [
         "A main concept from the lesson",
         "An unrelated topic",
-        "A random date with no context",
-        "A topic from another subject",
+        "A random fact not from the lesson",
+        "A different subject",
       ],
       answerIndex: 0,
-      explanation: `This question reviews a main concept from ${topic}.`,
+      explanation: `This question reviews a main idea from the lesson about ${topic}.`,
     },
   ];
 
   try {
-  const quizSeed = Math.random().toString(36).substring(2, 10);
-
-const quizFocusOptions = [
-  "major events",
-  "important people",
-  "causes and effects",
-  "timeline and sequence",
-  "key terms",
-  "turning points",
-  "long-term impact",
-];
-
-  const quizFocus =
-  quizFocusOptions[Math.floor(Math.random() * quizFocusOptions.length)];
+    const quizSeed = Math.random().toString(36).substring(2, 10);
 
     const prompt = `
 You are creating a quiz for an educational app.
@@ -170,9 +215,11 @@ Subject: ${subject}
 Topic: ${topic}
 Difficulty: ${difficulty}
 Quiz variation seed: ${quizSeed}
-Quiz focus: ${quizFocus}
 
-Generate exactly 5 multiple choice questions.
+Lesson the student just read:
+${lesson}
+
+Generate exactly 5 multiple choice questions based ONLY on the lesson above.
 
 Return ONLY valid JSON in this exact format:
 {
@@ -191,20 +238,19 @@ Return ONLY valid JSON in this exact format:
 }
 
 Rules:
+- Every question must be answerable from the lesson.
+- Every correct answer must be clearly found in the lesson.
+- Do NOT ask about facts that are not mentioned in the lesson.
+- If the lesson does not mention a detail, do not ask about it.
+- Do NOT use outside knowledge.
+- Do NOT ask random extra facts from the topic.
 - Each question must have exactly 1 correct answer and 3 wrong answers.
-- All 4 answer choices must be directly related to the selected subject and topic.
-- Wrong answers must be plausible misconceptions within the same subject area, not random unrelated ideas.
-- Do NOT use answer choices from unrelated subjects, time periods, concepts, or categories.
-- Every answer choice must sound like it could reasonably belong in a lesson about ${subject}: ${topic}.
-- Wrong answers should be believable, but still clearly incorrect.
-- Avoid obviously silly, impossible, or unrelated distractors.
+- Wrong answers should be related to the topic, but still clearly incorrect based on the lesson.
 - Do not label choices A, B, C, or D.
 - Do not include answerIndex.
 - Keep explanations short.
 - Make questions match the selected difficulty.
 - Generate a new variation of questions each time.
-- Do not reuse the same question wording from previous attempts.
-- Focus this quiz more on: ${quizFocus}.
 `;
 
     const response = await openai.responses.create({
@@ -212,7 +258,10 @@ Rules:
       input: prompt,
     });
 
-    const data = JSON.parse(response.output_text.trim());
+    let text = response.output_text.trim();
+    text = text.replace(/```json/g, "").replace(/```/g, "").trim();
+
+    const data = JSON.parse(text);
 
     if (!data.questions || !Array.isArray(data.questions)) {
       throw new Error("Invalid quiz format returned by AI");
@@ -269,20 +318,53 @@ app.post("/api/reinforcement-lesson", async (req, res) => {
     });
   }
 
+  let reviewRules = "";
+
+  if (difficulty === "Easy") {
+    reviewRules = `
+- Each mini lesson must be exactly 1 short sentence.
+- Keep it under 22 words.
+- Use very simple words.
+- Give a hint about the concept instead of giving away the direct quiz answer.
+- Do not directly state the correct answer as a quiz answer.
+- Do not say "the correct answer."
+- Do not say "not [wrong answer], but [correct answer]."
+- Do not include extra background details.
+`;
+  } else if (difficulty === "Intermediate") {
+    reviewRules = `
+- Each mini lesson should be exactly 2 sentences.
+- Explain the mistake and the correct idea without giving away a future answer too directly.
+- Use clear student-friendly language.
+`;
+  } else if (difficulty === "Hard") {
+    reviewRules = `
+- Each mini lesson should be 2-3 sentences.
+- Explain the deeper connection, cause, or effect.
+- Use more detail, but keep it understandable.
+- Do not simply give away the answer.
+`;
+  } else {
+    reviewRules = `
+- Each mini lesson should be 1-2 sentences.
+- Explain the mistake and the correct idea clearly.
+`;
+  }
+
   try {
     const amount = missedQuestions.length;
 
     const prompt = `
-You are creating a short review lesson for a student.
+You are creating review hints for a student who missed quiz questions.
 
 Subject: ${subject}
 Topic: ${topic}
 Difficulty: ${difficulty}
 
-The student missed these questions:
+Missed questions:
 ${JSON.stringify(missedQuestions, null, 2)}
 
-Generate EXACTLY ${amount} mini lessons.
+Create exactly ${amount} different mini review hints.
 
 Return ONLY valid JSON in this exact format:
 {
@@ -293,14 +375,19 @@ Return ONLY valid JSON in this exact format:
 }
 
 Rules:
-- You MUST return exactly ${amount} lessons, no more and no less.
-- Each lesson should be 1-2 sentences.
+- Return exactly ${amount} lessons.
+- Each lesson must be different.
 - Each lesson must match one missed question.
-- Explain the concept, not just the answer.
+- Use the missed question, student's wrong answer, and correct answer to understand the misunderstanding.
+- Do NOT give away the direct answer too obviously.
 - Do NOT say "the answer is..."
+- Do NOT say "the correct answer is..."
 - Do NOT repeat the exact question.
-- Use simple student-friendly language.
-- Match the selected difficulty.
+- Do not give generic advice like "review the main idea."
+- Stay focused on ${topic}.
+
+Difficulty rules:
+${reviewRules}
 `;
 
     const response = await openai.responses.create({
@@ -308,7 +395,10 @@ Rules:
       input: prompt,
     });
 
-    let data = JSON.parse(response.output_text.trim());
+    let text = response.output_text.trim();
+    text = text.replace(/```json/g, "").replace(/```/g, "").trim();
+
+    let data = JSON.parse(text);
 
     if (!data.lessons || !Array.isArray(data.lessons)) {
       throw new Error("Invalid reinforcement lesson format returned by AI");
@@ -319,9 +409,15 @@ Rules:
     }
 
     while (data.lessons.length < amount) {
-      data.lessons.push(
-        `Review the concept carefully for ${topic} before trying again.`
-      );
+      if (difficulty === "Easy") {
+        data.lessons.push(
+          "Think about the main idea from the lesson before choosing again."
+        );
+      } else {
+        data.lessons.push(
+          `This question connects to an important idea from ${topic}. Review the lesson carefully before trying again.`
+        );
+      }
     }
 
     res.json({
@@ -333,10 +429,17 @@ Rules:
   } catch (error) {
     console.error("OpenAI reinforcement lesson error:", error.message);
 
-    const fallbackLessons = missedQuestions.map(
-      () =>
-        `Review the main idea of ${topic}. Focus on understanding the concept before trying again.`
-    );
+    const fallbackLessons = missedQuestions.map(() => {
+      if (difficulty === "Easy") {
+        return "Think about the main idea from the lesson before choosing again.";
+      }
+
+      if (difficulty === "Intermediate") {
+        return `This question connects to an important idea from ${topic}. Review what the lesson said and try again.`;
+      }
+
+      return `This missed question connects to a deeper idea from ${topic}. Review how the lesson explains the cause, effect, or meaning.`;
+    });
 
     res.json({
       subject,
@@ -356,6 +459,44 @@ app.post("/api/reinforcement", async (req, res) => {
     });
   }
 
+  let reinforcementRules = "";
+
+  if (difficulty === "Easy") {
+    reinforcementRules = `
+- Use very simple questions.
+- Ask about one clear fact at a time.
+- Do not ask broad impact or deep cause/effect questions.
+- Do not use phrases like "significant change", "quality of life", or "long-term impact".
+- Keep each question under 14 words.
+- Keep each answer choice short and simple.
+- Make the correct answer clear if the student understood the review hint.
+`;
+  } else if (difficulty === "Intermediate") {
+    reinforcementRules = `
+- Use clear questions with moderate detail.
+- Ask about simple cause/effect, sequence, or meaning.
+- Questions can be slightly longer than Easy.
+- Avoid overly broad analysis questions.
+- Keep each question under 22 words.
+- Answer choices should be believable but not confusing.
+`;
+  } else if (difficulty === "Hard") {
+    reinforcementRules = `
+- Use more detailed questions.
+- Ask about cause/effect, connections, consequences, or comparisons.
+- Questions can require deeper thinking.
+- Use proper terms when helpful.
+- Answer choices should be more challenging but still fair.
+- Do not make the question impossible without outside knowledge.
+`;
+  } else {
+    reinforcementRules = `
+- Make the questions clear and fair.
+- Match the selected difficulty.
+- Keep answers related to the missed concept.
+`;
+  }
+
   const fallbackQuestions = [
     {
       question: `Which idea from ${topic} should be reviewed again?`,
@@ -371,7 +512,7 @@ app.post("/api/reinforcement", async (req, res) => {
   ];
 
   try {
-    const amount = Math.max(1, Math.min(missedQuestions.length, 3));
+    const amount = Math.max(1, Math.min(missedQuestions.length, 5));
 
     const prompt = `
 You are creating reinforcement questions for a student.
@@ -401,16 +542,19 @@ Return ONLY valid JSON in this exact format:
   ]
 }
 
-Rules:
+General rules:
 - Focus on the concept the student missed.
-- Do NOT copy or restate the weak concept directly.
-- Ask the question in a different way.
-- Make the student think, not just recall a sentence.
-- Avoid obvious or word-for-word answers.
+- Use the correct answer and wrong answer to understand what the student misunderstood.
+- Do NOT copy or restate the old question directly.
+- Ask the new question in a different way.
 - Each question must have 1 correct and 3 wrong answers.
 - Wrong answers should be believable.
-- Keep explanations short.
 - Avoid using the exact same wording as the missed question or explanation.
+- Do not label choices A, B, C, or D.
+- Do not include answerIndex.
+
+Difficulty rules:
+${reinforcementRules}
 `;
 
     const response = await openai.responses.create({
@@ -418,7 +562,10 @@ Rules:
       input: prompt,
     });
 
-    const data = JSON.parse(response.output_text.trim());
+    let text = response.output_text.trim();
+    text = text.replace(/```json/g, "").replace(/```/g, "").trim();
+
+    const data = JSON.parse(text);
 
     if (!data.questions || !Array.isArray(data.questions)) {
       throw new Error("Invalid reinforcement format returned by AI");
