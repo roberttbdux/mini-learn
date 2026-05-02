@@ -31,6 +31,8 @@ export default function App() {
   const [reinforcementScore, setReinforcementScore] = useState(0);
   const [originalScore, setOriginalScore] = useState(0);
 
+  const [previousLessons, setPreviousLessons] = useState([]);
+
   function resetProgress() {
     setLesson("");
     setQuestions([]);
@@ -54,21 +56,55 @@ export default function App() {
       const lessonResponse = await fetch("/api/lesson", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subject, topic, difficulty }),
+        body: JSON.stringify({
+          subject,
+          topic,
+          difficulty,
+          previousLessons,
+        }),
       });
 
       const lessonData = await lessonResponse.json();
+      const generatedLesson = lessonData.lesson || "";
+
+      if (!generatedLesson) {
+        throw new Error("No lesson was generated");
+      }
 
       const quizResponse = await fetch("/api/quiz", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subject, topic, difficulty }),
+        body: JSON.stringify({
+          subject,
+          topic,
+          difficulty,
+          lesson: generatedLesson,
+        }),
       });
 
       const quizData = await quizResponse.json();
 
-      setLesson(lessonData.lesson || "");
-      setQuestions(quizData.questions || []);
+      if (!quizData.questions || !Array.isArray(quizData.questions)) {
+        throw new Error("No quiz questions were generated");
+      }
+
+      setLesson(generatedLesson);
+      setQuestions(quizData.questions);
+
+      setPreviousLessons((oldLessons) => {
+        const updatedLessons = [
+          ...oldLessons,
+          {
+            subject,
+            topic,
+            difficulty,
+            lesson: generatedLesson,
+          },
+        ];
+
+        return updatedLessons.slice(-10);
+      });
+
       setScreen("lesson");
     } catch (error) {
       console.error(error);
@@ -96,9 +132,8 @@ export default function App() {
             answer !== null && answer !== undefined
               ? question.choices[answer]
               : "No answer selected",
+          correctAnswer: question.choices[question.answerIndex],
           explanation: question.explanation,
-          answerIndex: question.answerIndex,
-          choices: question.choices,
         });
       }
     });
