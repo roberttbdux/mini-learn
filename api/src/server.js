@@ -5,9 +5,19 @@ require("dotenv").config();
 
 const app = express();
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+const openai = process.env.OPENAI_API_KEY
+  ? new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    })
+  : null;
+
+function requireOpenAI() {
+  if (!openai) {
+    throw new Error("OPENAI_API_KEY is missing");
+  }
+
+  return openai;
+}
 
 app.use(cors());
 app.use(express.json());
@@ -145,7 +155,7 @@ Difficulty rules:
 ${difficultyRules}
 `;
 
-    const response = await openai.responses.create({
+    const response = await requireOpenAI().responses.create({
       model: "gpt-4.1-mini",
       input: prompt,
     });
@@ -193,15 +203,15 @@ app.post("/api/quiz", async (req, res) => {
 
   const fallbackQuestions = [
     {
-      question: `According to the lesson, what is one main idea about ${topic}?`,
+      question: `What should quiz questions about ${topic} be based on?`,
       choices: [
-        "A main concept from the lesson",
-        "An unrelated topic",
-        "A random fact not from the lesson",
-        "A different subject",
+        `The lesson content about ${topic}`,
+        `A different concept from ${subject}`,
+        `A common misunderstanding about ${topic}`,
+        "A concept not taught in this lesson",
       ],
       answerIndex: 0,
-      explanation: `This question reviews a main idea from the lesson about ${topic}.`,
+      explanation: `Quiz questions should come from the lesson content about ${topic}.`,
     },
   ];
 
@@ -245,7 +255,15 @@ Rules:
 - Do NOT use outside knowledge.
 - Do NOT ask random extra facts from the topic.
 - Each question must have exactly 1 correct answer and 3 wrong answers.
-- Wrong answers should be related to the topic, but still clearly incorrect based on the lesson.
+Answer choice rules:
+- All 4 choices must be related to the lesson topic.
+- The 3 wrong answers must be believable but clearly incorrect based on the lesson.
+- Wrong answers should reflect common beginner misunderstandings.
+- Do NOT include silly, joke, or obviously fake choices.
+- Do NOT include unrelated historical periods, random people, random countries, or random topics.
+- Do NOT make two wrong answers mean almost the same thing.
+- Do NOT use choices that can be eliminated only because they sound ridiculous.
+- Do NOT include answer choices about weather, seasons, jokes, or random subjects unless the lesson is actually about that.
 - Do not label choices A, B, C, or D.
 - Do not include answerIndex.
 - Keep explanations short.
@@ -253,7 +271,7 @@ Rules:
 - Generate a new variation of questions each time.
 `;
 
-    const response = await openai.responses.create({
+    const response = await requireOpenAI().responses.create({
       model: "gpt-4.1-mini",
       input: prompt,
     });
@@ -379,6 +397,9 @@ Rules:
 - Each lesson must be different.
 - Each lesson must match one missed question.
 - Use the missed question, student's wrong answer, and correct answer to understand the misunderstanding.
+- Explain why the student's selected answer was not the best choice.
+- Explain the correct idea in simple words.
+- The student should be able to answer a similar follow-up question after reading the review lesson.
 - Do NOT give away the direct answer too obviously.
 - Do NOT say "the answer is..."
 - Do NOT say "the correct answer is..."
@@ -390,7 +411,7 @@ Difficulty rules:
 ${reviewRules}
 `;
 
-    const response = await openai.responses.create({
+    const response = await requireOpenAI().responses.create({
       model: "gpt-4.1-mini",
       input: prompt,
     });
@@ -451,7 +472,13 @@ ${reviewRules}
 });
 
 app.post("/api/reinforcement", async (req, res) => {
-  const { subject, topic, difficulty, missedQuestions } = req.body;
+  const {
+    subject,
+    topic,
+    difficulty,
+    missedQuestions,
+    reinforcementLessons = [],
+  } = req.body;
 
   if (!subject || !topic || !difficulty || !Array.isArray(missedQuestions)) {
     return res.status(400).json({
@@ -499,12 +526,12 @@ app.post("/api/reinforcement", async (req, res) => {
 
   const fallbackQuestions = [
     {
-      question: `Which idea from ${topic} should be reviewed again?`,
+      question: `What should the student review before trying ${topic} again?`,
       choices: [
-        "The missed concept",
-        "An unrelated subject",
-        "A random topic",
-        "A different class",
+        "The concept missed in the quiz",
+        `A related idea from ${topic}`,
+        `A common misunderstanding about ${topic}`,
+        "A concept not covered by the lesson",
       ],
       answerIndex: 0,
       explanation: `This reviews a concept the student missed from ${topic}.`,
@@ -523,6 +550,9 @@ Difficulty: ${difficulty}
 
 The student missed these questions:
 ${JSON.stringify(missedQuestions, null, 2)}
+
+Review lessons shown to the student:
+${JSON.stringify(reinforcementLessons, null, 2)}
 
 Generate exactly ${amount} multiple choice reinforcement questions.
 
@@ -544,6 +574,8 @@ Return ONLY valid JSON in this exact format:
 
 General rules:
 - Focus on the concept the student missed.
+- Base the new questions on the missed concepts and the review lessons.
+- Every question must be answerable from the review lesson or missed question information.
 - Use the correct answer and wrong answer to understand what the student misunderstood.
 - Do NOT copy or restate the old question directly.
 - Ask the new question in a different way.
@@ -553,11 +585,22 @@ General rules:
 - Do not label choices A, B, C, or D.
 - Do not include answerIndex.
 
+Answer choice rules:
+- All 4 choices must be related to the missed concept or review lesson.
+- The correct answer must be supported by the review lesson or missed question information.
+- The 3 wrong answers must be believable but clearly incorrect.
+- Wrong answers should reflect common beginner misunderstandings.
+- Do NOT include silly, joke, or obviously fake choices.
+- Do NOT include unrelated topics, random people, random countries, or random time periods.
+- Do NOT make two wrong answers mean almost the same thing.
+- Do NOT use choices that can be eliminated only because they sound ridiculous.
+- Do NOT include answer choices about weather, seasons, jokes, or random subjects unless the review lesson is actually about that.
+
 Difficulty rules:
 ${reinforcementRules}
 `;
 
-    const response = await openai.responses.create({
+    const response = await requireOpenAI().responses.create({
       model: "gpt-4.1-mini",
       input: prompt,
     });

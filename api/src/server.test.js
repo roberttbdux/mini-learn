@@ -31,6 +31,8 @@ describe("Mini Learn API", () => {
       subject: "History",
       topic: "Cold War",
       difficulty: "Intermediate",
+      lesson:
+      "The Cold War was a political conflict between the United States and the Soviet Union. The two sides competed through alliances, weapons, and influence instead of direct war.",
     });
 
     expect(res.status).toBe(200);
