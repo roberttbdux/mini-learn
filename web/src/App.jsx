@@ -174,6 +174,7 @@ export default function App() {
       });
 
       const lessonData = await lessonResponse.json();
+      const generatedReinforcementLessons = lessonData.lessons || [];
 
       const questionResponse = await fetch("/api/reinforcement", {
         method: "POST",
@@ -183,12 +184,13 @@ export default function App() {
           topic,
           difficulty,
           missedQuestions,
+          reinforcementLessons: generatedReinforcementLessons,
         }),
       });
 
       const questionData = await questionResponse.json();
 
-      setReinforcementLessons(lessonData.lessons || []);
+      setReinforcementLessons(generatedReinforcementLessons);
       setReinforcementQuestions(questionData.questions || []);
       setReinforcementScore(0);
       setScreen("reinforcementLesson");
