@@ -9,6 +9,7 @@ import ResultsScreen from "./pages/ResultsScreen";
 import ReinforcementLessonScreen from "./pages/ReinforcementLessonScreen";
 import ReinforcementScreen from "./pages/ReinforcementScreen";
 import FinalResultsScreen from "./pages/FinalResultsScreen";
+import ReviewMissedQuestionsScreen from "./pages/ReviewMissedQuestionsScreen";
 
 export default function App() {
   const [screen, setScreen] = useState("main");
@@ -26,6 +27,9 @@ export default function App() {
   const [practiceAnswers, setPracticeAnswers] = useState([]);
   const [missedQuestions, setMissedQuestions] = useState([]);
 
+  const [finalWeakConcept, setFinalWeakConcept] = useState("");
+  const [finalMissedQuestions, setFinalMissedQuestions] = useState([]);
+
   const [reinforcementLessons, setReinforcementLessons] = useState([]);
   const [reinforcementQuestions, setReinforcementQuestions] = useState([]);
   const [reinforcementScore, setReinforcementScore] = useState(0);
@@ -38,6 +42,8 @@ export default function App() {
     setQuestions([]);
     setPracticeAnswers([]);
     setMissedQuestions([]);
+    setFinalWeakConcept("");
+    setFinalMissedQuestions([]);
     setReinforcementLessons([]);
     setReinforcementQuestions([]);
     setScore(0);
@@ -114,7 +120,7 @@ export default function App() {
     }
   }
 
-  function handlePracticeFinish(userAnswers) {
+  async function handlePracticeFinish(userAnswers) {
     setPracticeAnswers(userAnswers);
 
     let correctCount = 0;
@@ -138,14 +144,72 @@ export default function App() {
       }
     });
 
-    setMissedQuestions(missed);
     setScore(correctCount);
     setOriginalScore(correctCount);
 
+    let updatedMissed = missed;
+
     if (missed.length > 0) {
-      setWeakConcept(missed[0].explanation || missed[0].question);
+      setLoading(true);
+
+      try {
+        const explanationResponse = await fetch("/api/missed-explanations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            subject,
+            topic,
+            difficulty,
+            missedQuestions: missed,
+          }),
+        });
+
+        const explanationData = await explanationResponse.json();
+
+        if (
+          explanationData.missedQuestions &&
+          Array.isArray(explanationData.missedQuestions)
+        ) {
+          updatedMissed = explanationData.missedQuestions;
+        }
+      } catch (error) {
+        console.error(error);
+        updatedMissed = missed;
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    setMissedQuestions(updatedMissed);
+
+    if (updatedMissed.length > 0) {
+      setLoading(true);
+
+      try {
+        const summaryResponse = await fetch("/api/weak-summary", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            subject,
+            topic,
+            difficulty,
+            missedQuestions: updatedMissed,
+          }),
+        });
+
+        const summaryData = await summaryResponse.json();
+
+        setWeakConcept(
+          summaryData.weakSummary || `You missed a few key parts of ${topic}.`
+        );
+      } catch (error) {
+        console.error(error);
+        setWeakConcept(`You missed a few key parts of ${topic}.`);
+      } finally {
+        setLoading(false);
+      }
     } else {
-      setWeakConcept("None - Great job!");
+      setWeakConcept("You did not miss any weak areas. Great job!");
     }
 
     setScreen("results");
@@ -193,6 +257,8 @@ export default function App() {
       setReinforcementLessons(generatedReinforcementLessons);
       setReinforcementQuestions(questionData.questions || []);
       setReinforcementScore(0);
+      setFinalWeakConcept("");
+      setFinalMissedQuestions([]);
       setScreen("reinforcementLesson");
     } catch (error) {
       console.error(error);
@@ -202,16 +268,97 @@ export default function App() {
     }
   }
 
-  function handleReinforcementFinish(userAnswers) {
+  async function handleReinforcementFinish(userAnswers) {
     let correctCount = 0;
+    const missedReinforcement = [];
 
     userAnswers.forEach((answer, index) => {
-      if (answer === reinforcementQuestions[index]?.answerIndex) {
+      const question = reinforcementQuestions[index];
+
+      if (answer === question?.answerIndex) {
         correctCount++;
+      } else if (question) {
+        missedReinforcement.push({
+          question: question.question,
+          yourAnswer:
+            answer !== null && answer !== undefined
+              ? question.choices[answer]
+              : "No answer selected",
+          correctAnswer: question.choices[question.answerIndex],
+          explanation: question.explanation,
+        });
       }
     });
 
     setReinforcementScore(correctCount);
+
+    let updatedFinalMissed = missedReinforcement;
+
+    if (missedReinforcement.length > 0) {
+      setLoading(true);
+
+      try {
+        const explanationResponse = await fetch("/api/missed-explanations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            subject,
+            topic,
+            difficulty,
+            missedQuestions: missedReinforcement,
+          }),
+        });
+
+        const explanationData = await explanationResponse.json();
+
+        if (
+          explanationData.missedQuestions &&
+          Array.isArray(explanationData.missedQuestions)
+        ) {
+          updatedFinalMissed = explanationData.missedQuestions;
+        }
+      } catch (error) {
+        console.error(error);
+        updatedFinalMissed = missedReinforcement;
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    setFinalMissedQuestions(updatedFinalMissed);
+
+    if (updatedFinalMissed.length > 0) {
+      setLoading(true);
+
+      try {
+        const summaryResponse = await fetch("/api/weak-summary", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            subject,
+            topic,
+            difficulty,
+            missedQuestions: updatedFinalMissed,
+          }),
+        });
+
+        const summaryData = await summaryResponse.json();
+
+        setFinalWeakConcept(
+          summaryData.weakSummary || `You still missed a key part of ${topic}.`
+        );
+      } catch (error) {
+        console.error(error);
+        setFinalWeakConcept(`You still missed a key part of ${topic}.`);
+      } finally {
+        setLoading(false);
+      }
+    } else {
+      setFinalWeakConcept(
+        "You corrected the areas you missed during reinforcement."
+      );
+    }
+
     setScreen("finalResults");
   }
 
@@ -293,6 +440,7 @@ export default function App() {
           total={questions.length}
           missedQuestions={missedQuestions}
           weakConcept={weakConcept}
+          difficulty={difficulty}
           onReviewMistakes={handleStartReinforcement}
           onReturnHome={() => setScreen("main")}
           onStudyAnotherTopic={() => setScreen("topics")}
@@ -323,9 +471,19 @@ export default function App() {
           originalTotal={questions.length}
           reinforcementScore={reinforcementScore}
           reinforcementTotal={reinforcementQuestions.length}
-          weakConcept={weakConcept}
+          weakConcept={finalWeakConcept}
+          difficulty={difficulty}
+          missedQuestions={finalMissedQuestions}
+          onReviewMissedQuestions={() => setScreen("reviewMissed")}
           onReturnHome={() => setScreen("main")}
           onStudyAnotherTopic={() => setScreen("topics")}
+        />
+      )}
+
+      {screen === "reviewMissed" && (
+        <ReviewMissedQuestionsScreen
+          missedQuestions={finalMissedQuestions}
+          onBack={() => setScreen("finalResults")}
         />
       )}
 
