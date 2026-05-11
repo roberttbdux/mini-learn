@@ -656,6 +656,161 @@ ${reinforcementRules}
   }
 });
 
+app.post("/api/missed-explanations", async (req, res) => {
+  const { subject, topic, difficulty, missedQuestions } = req.body;
+
+  if (!subject || !topic || !difficulty || !Array.isArray(missedQuestions)) {
+    return res.status(400).json({
+      error: "subject, topic, difficulty, and missedQuestions are required",
+    });
+  }
+
+  if (missedQuestions.length === 0) {
+    return res.json({ missedQuestions: [] });
+  }
+
+  try {
+    const prompt = `
+You are helping a student review missed quiz questions in an app called Mini Learn.
+
+Subject: ${subject}
+Topic: ${topic}
+Difficulty: ${difficulty}
+
+The student missed these questions:
+${JSON.stringify(missedQuestions, null, 2)}
+
+For each missed question, write a simple "why" explanation.
+
+Return ONLY valid JSON in this exact format:
+{
+  "missedQuestions": [
+    {
+      "question": "same question text",
+      "yourAnswer": "same student answer",
+      "correctAnswer": "same correct answer",
+      "explanation": "AI explanation here"
+    }
+  ]
+}
+
+Rules:
+- Return the same number of missed questions.
+- Keep the same question, yourAnswer, and correctAnswer text.
+- Rewrite only the explanation.
+- Explain why the student's answer was not correct.
+- Explain why the correct answer makes sense.
+- Use simple student-friendly language.
+- Keep each explanation 1-2 short sentences.
+- Do not say "the AI says."
+- Do not say "according to the lesson."
+- Do not say "the lesson says."
+- Do not say "as the lesson explains."
+- Do not keep repeating the word "lesson."
+- Explain it naturally like a tutor.
+- Do not use big words.
+- Do not be rude to the student.
+- Do not introduce facts that were not in the lesson or missed question information.
+`;
+
+    const response = await requireOpenAI().responses.create({
+      model: "gpt-4.1-mini",
+      input: prompt,
+    });
+
+    let text = response.output_text.trim();
+    text = text.replace(/```json/g, "").replace(/```/g, "").trim();
+
+    const data = JSON.parse(text);
+
+    if (!data.missedQuestions || !Array.isArray(data.missedQuestions)) {
+      throw new Error("Invalid missed explanation format returned by AI");
+    }
+
+    res.json({
+      missedQuestions: data.missedQuestions,
+    });
+  } catch (error) {
+    console.error("OpenAI missed explanations error:", error.message);
+
+    res.json({
+      missedQuestions: missedQuestions.map((item) => ({
+        ...item,
+        explanation:
+          item.explanation ||
+          "Review this question again and compare your answer with the correct answer.",
+      })),
+    });
+  }
+});
+
+app.post("/api/weak-summary", async (req, res) => {
+  const { subject, topic, difficulty, missedQuestions } = req.body;
+
+  if (!subject || !topic || !difficulty || !Array.isArray(missedQuestions)) {
+    return res.status(400).json({
+      error: "subject, topic, difficulty, and missedQuestions are required",
+    });
+  }
+
+  if (missedQuestions.length === 0) {
+    return res.json({
+      weakSummary: "You did not miss any weak areas. Great job!",
+    });
+  }
+
+  try {
+    const prompt = `
+You are giving final feedback for an educational app called Mini Learn.
+
+Subject: ${subject}
+Topic: ${topic}
+Difficulty: ${difficulty}
+
+The student missed these questions:
+${JSON.stringify(missedQuestions, null, 2)}
+
+Write one short feedback message telling the student what areas they missed.
+
+Rules:
+- Talk directly to the student using "you".
+- Do not say they missed the whole topic.
+- Focus on the smaller areas inside the topic.
+- Mention the kinds of areas they missed, like causes, timeline, important people, major events, definitions, agreements, or effects, only if they match the missed questions.
+- Keep it 1 sentence only.
+- Use simple student-friendly language.
+- Do not list every question.
+- Do not say "Based on the missed questions."
+- Do not use big words.
+- Do not say "weaknesses."
+- Do not give study advice.
+- Do not say "review these."
+- Do not say "going over these."
+- Do not say "this will help you."
+- Do not tell the student what to do next.
+- Only say what they missed.
+
+Example style:
+"You missed questions about important Cold War events, agreements, and how countries responded during major conflicts."
+`;
+
+    const response = await requireOpenAI().responses.create({
+      model: "gpt-4.1-mini",
+      input: prompt,
+    });
+
+    res.json({
+      weakSummary: response.output_text.trim(),
+    });
+  } catch (error) {
+    console.error("OpenAI weak summary error:", error.message);
+
+    res.json({
+      weakSummary: `You missed a few key parts of ${topic}.`,
+    });
+  }
+});
+
 if (require.main === module) {
   app.listen(process.env.PORT || 5000, "0.0.0.0", () => {
     console.log(`Server running on port ${process.env.PORT || 5000}`);
