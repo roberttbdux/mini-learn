@@ -135,6 +135,11 @@ ${oldLessonsForSameTopic || "None"}
 
 Main rules:
 - Start directly with the topic.
+- Stay directly on the topic the student typed.
+- Do not start with unrelated people, inventions, events, or examples.
+- Do not compare the topic to another topic unless it is necessary.
+- If the topic is broad, give a basic overview of that topic only.
+- For custom typed topics, do not assume a different topic.
 - Do not say "Here is a lesson."
 - Do not talk to the reader.
 - Do not use "you."
